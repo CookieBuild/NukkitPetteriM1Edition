@@ -55,7 +55,6 @@ import cn.nukkit.math.*;
 import cn.nukkit.metadata.MetadataValue;
 import cn.nukkit.nbt.NBTIO;
 import cn.nukkit.nbt.tag.*;
-import cn.nukkit.network.Network;
 import cn.nukkit.network.SourceInterface;
 import cn.nukkit.network.protocol.*;
 import cn.nukkit.network.protocol.types.ContainerIds;
@@ -82,6 +81,7 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongIterator;
 import it.unimi.dsi.fastutil.objects.ObjectIterator;
+import org.apache.commons.math3.util.FastMath;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;
@@ -199,7 +199,9 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
     protected boolean checkMovement = true;
 
-    private final Map<Integer, List<DataPacket>> batchedPackets = new TreeMap<>();
+    //private final Map<Integer, List<DataPacket>> batchedPackets = new TreeMap<>();
+
+    private final List<DataPacket> batchedPackets = new ArrayList<>();
 
     private PermissibleBase perm;
 
@@ -747,9 +749,10 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         pk.chunkZ = z;
         pk.subChunkCount = subChunkCount;
         pk.data = payload;
-        pk.setChannel(Network.CHANNEL_WORLD_CHUNKS);
+        //pk.setChannel(Network.CHANNEL_WORLD_CHUNKS);
 
-        this.batchDataPacket(pk);
+        //this.batchDataPacket(pk);
+        this.server.batchPackets(new Player[]{this}, new DataPacket[]{pk}, true);
 
         if (this.spawned) {
             for (Entity entity : this.level.getChunkEntities(x, z).values()) {
@@ -765,7 +768,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             return;
         }
 
-        Timings.playerChunkSendTimer.startTiming();
+        if (Timings.playerChunkSendTimer != null) Timings.playerChunkSendTimer.startTiming();
 
         if (!loadQueue.isEmpty()) {
             int count = 0;
@@ -813,7 +816,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             this.spawnChunkLoadCount = -1;
         }
 
-        Timings.playerChunkSendTimer.stopTiming();
+        if (Timings.playerChunkSendTimer != null) Timings.playerChunkSendTimer.stopTiming();
     }
 
     protected void doFirstSpawn() {
@@ -886,7 +889,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             return false;
         }
 
-        Timings.playerChunkOrderTimer.startTiming();
+        if (Timings.playerChunkOrderTimer != null) Timings.playerChunkOrderTimer.startTiming();
 
         this.nextChunkOrderRun = 200;
 
@@ -966,7 +969,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             }
         }
 
-        Timings.playerChunkOrderTimer.stopTiming();
+        if (Timings.playerChunkOrderTimer != null) Timings.playerChunkOrderTimer.stopTiming();
         return true;
     }
 
@@ -986,11 +989,12 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                 }
             }
 
-            if (!this.batchedPackets.containsKey(packet.getChannel())) {
+            /*if (!this.batchedPackets.containsKey(packet.getChannel())) {
                 this.batchedPackets.put(packet.getChannel(), new ArrayList<>());
             }
 
-            this.batchedPackets.get(packet.getChannel()).add(packet.clone());
+            this.batchedPackets.get(packet.getChannel()).add(packet.clone());*/
+            batchedPackets.add(packet.clone());
         }
         return true;
     }
@@ -1420,7 +1424,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     protected void checkNearEntities() {
         Entity[] e = this.level.getNearbyEntities(this.boundingBox.grow(1, 0.5, 1), this);
         for (Entity entity : e) {
-            entity.scheduleUpdate();
+            //entity.scheduleUpdate();
 
             if (!entity.isAlive() || !this.isAlive()) {
                 continue;
@@ -1490,11 +1494,13 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                     }
                 }
 
-                this.x = newPos.x;
-                this.y = newPos.y;
-                this.z = newPos.z;
-                double radius = this.getWidth() / 2;
-                this.boundingBox.setBounds(this.x - radius, this.y, this.z - radius, this.x + radius, this.y + this.getHeight(), this.z + radius);
+                if (!revert) {
+                    this.x = newPos.x;
+                    this.y = newPos.y;
+                    this.z = newPos.z;
+                    double radius = this.getWidth() / 2;
+                    this.boundingBox.setBounds(this.x - radius, this.y, this.z - radius, this.x + radius, this.y + this.getHeight(), this.z + radius);
+                }
             }
         }
 
@@ -1652,7 +1658,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                 pk.motionX = (float) motion.x;
                 pk.motionY = (float) motion.y;
                 pk.motionZ = (float) motion.z;
-                pk.setChannel(Network.CHANNEL_MOVEMENT);
+                //pk.setChannel(Network.CHANNEL_MOVEMENT);
                 this.dataPacket(pk);
             }
 
@@ -1818,7 +1824,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
      * @return Entity|null    either NULL if no entity is found or an instance of the entity
      */
     public EntityInteractable getEntityPlayerLookingAt(int maxDistance) {
-        timing.startTiming();
+        if (timing != null) timing.startTiming();
 
         EntityInteractable entity = null;
 
@@ -1840,7 +1846,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             } catch (Exception ignored) {}
         }
 
-        timing.stopTiming();
+        if (timing != null) timing.stopTiming();
 
         return entity;
     }
@@ -1863,12 +1869,13 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
         if (!this.batchedPackets.isEmpty()) {
             Player[] pArr = new Player[]{this};
-            for (Entry<Integer, List<DataPacket>> entry : this.batchedPackets.entrySet()) {
+            /*for (Entry<Integer, List<DataPacket>> entry : this.batchedPackets.entrySet()) {
                 List<DataPacket> packets = entry.getValue();
                 DataPacket[] arr = packets.toArray(new DataPacket[0]);
                 packets.clear();
                 this.server.batchPackets(pArr, arr, false);
-            }
+            }*/
+            this.server.batchPackets(pArr, batchedPackets.toArray(new DataPacket[0]), false);
             this.batchedPackets.clear();
         }
 
@@ -2831,9 +2838,9 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                         break;
                     }
 
-                    Timings.playerCommandTimer.startTiming();
+                    if (Timings.playerCommandTimer != null) Timings.playerCommandTimer.startTiming();
                     this.server.dispatchCommand(playerCommandPreprocessEvent.getPlayer(), playerCommandPreprocessEvent.getMessage().substring(1));
-                    Timings.playerCommandTimer.stopTiming();
+                    if (Timings.playerCommandTimer != null) Timings.playerCommandTimer.stopTiming();
                     break;
                 case ProtocolInfo.TEXT_PACKET:
                     if (!this.spawned || !this.isAlive()) {
@@ -3590,7 +3597,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         TextPacket pk = new TextPacket();
         pk.type = TextPacket.TYPE_RAW;
         pk.message = this.server.getLanguage().translateString(message);
-        pk.setChannel(Network.CHANNEL_TEXT);
+        //pk.setChannel(Network.CHANNEL_TEXT);
         this.dataPacket(pk);
     }
 
@@ -3621,7 +3628,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             pk.type = TextPacket.TYPE_RAW;
             pk.message = this.server.getLanguage().translateString(message, parameters);
         }
-        pk.setChannel(Network.CHANNEL_TEXT);
+        //pk.setChannel(Network.CHANNEL_TEXT);
         this.dataPacket(pk);
     }
 
@@ -3634,7 +3641,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         pk.type = TextPacket.TYPE_CHAT;
         pk.source = source;
         pk.message = this.server.getLanguage().translateString(message);
-        pk.setChannel(Network.CHANNEL_TEXT);
+        //pk.setChannel(Network.CHANNEL_TEXT);
         this.dataPacket(pk);
     }
 
@@ -3642,7 +3649,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         TextPacket pk = new TextPacket();
         pk.type = TextPacket.TYPE_POPUP;
         pk.message = message;
-        pk.setChannel(Network.CHANNEL_TEXT);
+        //pk.setChannel(Network.CHANNEL_TEXT);
         this.dataPacket(pk);
     }
 
@@ -3654,7 +3661,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         TextPacket pk = new TextPacket();
         pk.type = TextPacket.TYPE_TIP;
         pk.message = message;
-        pk.setChannel(Network.CHANNEL_TEXT);
+        //pk.setChannel(Network.CHANNEL_TEXT);
         this.dataPacket(pk);
     }
 
@@ -4302,7 +4309,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         pk.pitch = (float) pitch;
         pk.yaw = (float) yaw;
         pk.mode = mode;
-        pk.setChannel(Network.CHANNEL_MOVEMENT);
+        //pk.setChannel(Network.CHANNEL_MOVEMENT);
 
         if (targets != null) {
             Server.broadcastPacket(targets, pk);
@@ -4322,7 +4329,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         pk.pitch = (float) pitch;
         pk.yaw = (float) yaw;
         pk.mode = mode;
-        pk.setChannel(Network.CHANNEL_MOVEMENT);
+        //pk.setChannel(Network.CHANNEL_MOVEMENT);
         Server.broadcastPacket(targets, pk);
     }
 
@@ -4459,7 +4466,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                 chunk.chunkX = chunkPositionX + x;
                 chunk.chunkZ = chunkPositionZ + z;
                 chunk.data = new byte[0];
-                chunk.setChannel(Network.CHANNEL_WORLD_CHUNKS);
+                //chunk.setChannel(Network.CHANNEL_WORLD_CHUNKS);
                 this.dataPacket(chunk);
             }
         }
@@ -4835,7 +4842,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         pk.subChunkCount = subChunkCount;
         pk.data = payload;
         pk.protocol = protocol;
-        pk.setChannel(Network.CHANNEL_WORLD_CHUNKS);
+        //pk.setChannel(Network.CHANNEL_WORLD_CHUNKS);
         pk.encode();
 
         BatchPacket batch = new BatchPacket();
@@ -5199,8 +5206,8 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 						.add(new FloatTag("", (float) pitch)));
 		double f = 1.1;
 		EntityFishingHook fishingHook = new EntityFishingHook(chunk, nbt, this);
-		fishingHook.setMotion(new Vector3(-Math.sin(Math.toRadians(yaw)) * Math.cos(Math.toRadians(pitch)) * f * f, -Math.sin(Math.toRadians(pitch)) * f * f,
-                Math.cos(Math.toRadians(yaw)) * Math.cos(Math.toRadians(pitch)) * f * f));
+		fishingHook.setMotion(new Vector3(-Math.sin(FastMath.toRadians(yaw)) * Math.cos(FastMath.toRadians(pitch)) * f * f, -Math.sin(FastMath.toRadians(pitch)) * f * f,
+                Math.cos(FastMath.toRadians(yaw)) * Math.cos(FastMath.toRadians(pitch)) * f * f));
 		ProjectileLaunchEvent ev = new ProjectileLaunchEvent(fishingHook);
 		this.getServer().getPluginManager().callEvent(ev);
 		if (ev.isCancelled()) {

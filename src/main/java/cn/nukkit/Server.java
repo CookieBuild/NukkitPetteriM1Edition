@@ -295,7 +295,7 @@ public class Server {
         Zlib.setProvider(this.getPropertyInt("zlib-provider", 2));
 
         this.networkCompressionLevel = this.getPropertyInt("compression-level", 4);
-        this.networkCompressionAsync = this.getPropertyBoolean("async-compression", false);
+        this.networkCompressionAsync = this.getPropertyBoolean("async-compression", true);
 
         this.autoTickRate = this.getPropertyBoolean("auto-tick-rate", true);
         this.autoTickRateLimit = this.getPropertyInt("auto-tick-rate-limit", 20);
@@ -653,9 +653,9 @@ public class Server {
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
-            });
+            }, true);
         } else {
-            Timings.playerNetworkSendTimer.startTiming();
+            if (Timings.playerNetworkSendTimer != null) Timings.playerNetworkSendTimer.startTiming();
             byte[][] payload = new byte[(packets.length << 1)][];
             int size = 0;
             for (int i = 0; i < packets.length; i++) {
@@ -687,7 +687,7 @@ public class Server {
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-            Timings.playerNetworkSendTimer.stopTiming();
+            if (Timings.playerNetworkSendTimer != null) Timings.playerNetworkSendTimer.stopTiming();
         }
     }
 
@@ -1074,7 +1074,7 @@ public class Server {
 
     public void doAutoSave() {
         if (this.autoSave) {
-            Timings.levelSaveTimer.startTiming();
+            if (Timings.levelSaveTimer != null) Timings.levelSaveTimer.startTiming();
             for (Player player : new ArrayList<>(this.players.values())) {
                 if (player.isOnline()) {
                     player.save(true);
@@ -1092,7 +1092,7 @@ public class Server {
                     }
                 }
             }
-            Timings.levelSaveTimer.stopTiming();
+            if (Timings.levelSaveTimer != null) Timings.levelSaveTimer.stopTiming();
         }
     }
 
@@ -1119,17 +1119,17 @@ public class Server {
 
         ++this.tickCounter;
 
-        Timings.connectionTimer.startTiming();
+        if (Timings.connectionTimer != null) Timings.connectionTimer.startTiming();
         this.network.processInterfaces();
 
         if (this.rcon != null) {
             this.rcon.check();
         }
-        Timings.connectionTimer.stopTiming();
+        if (Timings.connectionTimer != null) Timings.connectionTimer.stopTiming();
 
-        Timings.schedulerTimer.startTiming();
+        if (Timings.schedulerTimer != null) Timings.schedulerTimer.startTiming();
         this.scheduler.mainThreadHeartbeat(this.tickCounter);
-        Timings.schedulerTimer.stopTiming();
+        if (Timings.schedulerTimer != null) Timings.schedulerTimer.stopTiming();
 
         this.checkTickUpdates(this.tickCounter);
 
@@ -2232,7 +2232,7 @@ public class Server {
             put("debug-level", 1);
             put("async-workers", "auto");
             put("zlib-provider", 2);
-            put("async-compression", false);
+            put("async-compression", true);
             put("compression-level", 4);
             put("auto-tick-rate", true);
             put("auto-tick-rate-limit", 20);
