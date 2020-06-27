@@ -141,8 +141,18 @@ public abstract class Entity extends Location implements Metadatable {
     public static final int DATA_COMMAND_BLOCK_TICK_DELAY = 105; //int
     public static final int DATA_COMMAND_BLOCK_EXECUTE_ON_FIRST_TICK = 106; //byte
     public static final int DATA_AMBIENT_SOUND_INTERVAL_MIN = 107; //float
-    public static final int DATA_AMBIENT_SOUND_INTERVAL_RANGE = 108; //float
-    public static final int DATA_AMBIENT_SOUND_EVENT = 109; //string
+    public static final int DATA_AMBIENT_SOUND_INTERVAL_RANGE = 108;
+    public static final int DATA_AMBIENT_SOUND_EVENT_NAME = 109;
+    public static final int DATA_FALL_DAMAGE_MULTIPLIER = 110;
+    public static final int DATA_NAME_RAW_TEXT = 111;
+    public static final int DATA_CAN_RIDE_TARGET = 112;
+    public static final int DATA_LOW_TIER_CURED_DISCOUNT = 113;
+    public static final int DATA_HIGH_TIER_CURED_DISCOUNT = 114;
+    public static final int DATA_NEARBY_CURED_DISCOUNT = 115;
+    public static final int DATA_NEARBY_CURED_DISCOUNT_TIMESTAMP = 116;
+    public static final int DATA_HITBOX = 117;
+    public static final int DATA_IS_BUOYANT = 118;
+    public static final int DATA_BUOYANCY_DATA = 119;
 
     // Flags
     public static final int DATA_FLAG_ONFIRE = 0;
@@ -218,6 +228,7 @@ public abstract class Entity extends Location implements Metadatable {
     public static final int DATA_FLAG_FALL_THROUGH_SCAFFOLDING = 70;
     public static final int DATA_FLAG_BLOCKING = 71;
     public static final int DATA_FLAG_DISABLE_BLOCKING = 72;
+    public static final int DATA_FLAG_SHIELD_SHAKING = 74;
     public static final int DATA_FLAG_SLEEPING = 75;
     public static final int DATA_FLAG_TRADE_INTEREST = 77;
     public static final int DATA_FLAG_DOOR_BREAKER = 78;
@@ -228,6 +239,15 @@ public abstract class Entity extends Location implements Metadatable {
     public static final int DATA_FLAG_ROARING = 83;
     public static final int DATA_FLAG_DELAYED_ATTACKING = 84;
     public static final int DATA_FLAG_AVOIDING_MOBS = 85;
+    public static final int DATA_FLAG_IS_AVOIDING_BLOCKS = 86;
+    public static final int DATA_FLAG_FACING_TARGET_TO_RANGE_ATTACK = 87;
+    public static final int DATA_FLAG_HIDDEN_WHEN_INVISIBLE = 88;
+    public static final int DATA_FLAG_IS_IN_UI = 89;
+    public static final int DATA_FLAG_STALKING = 90;
+    public static final int DATA_FLAG_EMOTING = 91;
+    public static final int DATA_FLAG_CELEBRATING = 92;
+    public static final int DATA_FLAG_ADMIRING = 93;
+    public static final int DATA_FLAG_CELEBRATING_SPECIAL = 94;
 
     public static long entityCount = 1;
 
@@ -310,6 +330,12 @@ public abstract class Entity extends Location implements Metadatable {
     public boolean justCreated;
     public boolean fireProof;
     public boolean invulnerable;
+
+    private boolean gliding;
+    private boolean immobile;
+    private boolean sprinting;
+    private boolean swimming;
+    private boolean sneaking;
 
     protected Server server;
 
@@ -544,7 +570,7 @@ public abstract class Entity extends Location implements Metadatable {
     }
 
     public boolean isSneaking() {
-        return this.getDataFlag(DATA_FLAGS, DATA_FLAG_SNEAKING);
+        return this.sneaking;
     }
 
     public void setSneaking() {
@@ -552,11 +578,12 @@ public abstract class Entity extends Location implements Metadatable {
     }
 
     public void setSneaking(boolean value) {
+        this.sneaking = value;
         this.setDataFlag(DATA_FLAGS, DATA_FLAG_SNEAKING, value);
     }
 
     public boolean isSwimming() {
-        return this.getDataFlag(DATA_FLAGS, DATA_FLAG_SWIMMING);
+        return this.swimming;
     }
 
     public void setSwimming() {
@@ -564,11 +591,12 @@ public abstract class Entity extends Location implements Metadatable {
     }
 
     public void setSwimming(boolean value) {
+        this.swimming = value;
         this.setDataFlag(DATA_FLAGS, DATA_FLAG_SWIMMING, value);
     }
 
     public boolean isSprinting() {
-        return this.getDataFlag(DATA_FLAGS, DATA_FLAG_SPRINTING);
+        return this.sprinting;
     }
 
     public void setSprinting() {
@@ -576,11 +604,12 @@ public abstract class Entity extends Location implements Metadatable {
     }
 
     public void setSprinting(boolean value) {
+        this.sprinting = value;
         this.setDataFlag(DATA_FLAGS, DATA_FLAG_SPRINTING, value);
     }
 
     public boolean isGliding() {
-        return this.getDataFlag(DATA_FLAGS, DATA_FLAG_GLIDING);
+        return this.gliding;
     }
 
     public void setGliding() {
@@ -588,11 +617,12 @@ public abstract class Entity extends Location implements Metadatable {
     }
 
     public void setGliding(boolean value) {
+        this.gliding = value;
         this.setDataFlag(DATA_FLAGS, DATA_FLAG_GLIDING, value);
     }
 
     public boolean isImmobile() {
-        return this.getDataFlag(DATA_FLAGS, DATA_FLAG_IMMOBILE);
+        return this.immobile;
     }
 
     public void setImmobile() {
@@ -600,6 +630,7 @@ public abstract class Entity extends Location implements Metadatable {
     }
 
     public void setImmobile(boolean value) {
+        this.immobile = value;
         this.setDataFlag(DATA_FLAGS, DATA_FLAG_IMMOBILE, value);
     }
 
@@ -970,7 +1001,7 @@ public abstract class Entity extends Location implements Metadatable {
 
         addEntity.links = new EntityLink[this.passengers.size()];
         for (int i = 0; i < addEntity.links.length; i++) {
-            addEntity.links[i] = new EntityLink(this.id, this.passengers.get(i).id, i == 0 ? EntityLink.TYPE_RIDER : TYPE_PASSENGER, false);
+            addEntity.links[i] = new EntityLink(this.id, this.passengers.get(i).id, i == 0 ? EntityLink.TYPE_RIDER : TYPE_PASSENGER, false, false);
         }
 
         //addEntity.setChannel(Network.CHANNEL_ENTITY_SPAWNING);
