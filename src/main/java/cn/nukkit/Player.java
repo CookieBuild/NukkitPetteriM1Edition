@@ -817,12 +817,8 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         }
 
         if (this.spawnChunkLoadCount != -1 && ++this.spawnChunkLoadCount >= this.spawnThreshold) {
-            if (this.protocol < 274) {
-                this.initialized = true;
-                this.doFirstSpawn();
-            }
-
-            this.sendPlayStatus(PlayStatusPacket.PLAYER_SPAWN);
+            this.initialized = true;
+            this.doFirstSpawn();
             this.spawnChunkLoadCount = -1;
         }
 
@@ -834,9 +830,38 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             return;
         }
 
+        this.spawned = true;
+
         this.noDamageTicks = 60;
-        this.setAirTicks(400);
+        this.setEnableClientCommand(true);
         this.sendAttributes();
+        this.adventureSettings.update();
+        this.sendPotionEffects(this);
+        this.sendData(this);
+        this.sendAllInventories();
+
+        if (this.protocol < 407) {
+            if (this.gamemode == Player.SPECTATOR) {
+                InventoryContentPacket inventoryContentPacket = new InventoryContentPacket();
+                inventoryContentPacket.inventoryId = ContainerIds.CREATIVE;
+                this.dataPacket(inventoryContentPacket);
+
+            } else {
+                this.inventory.sendCreativeContents();
+            }
+        } else {
+            this.inventory.sendCreativeContents();
+        }
+
+        this.inventory.sendHeldItem(this);
+        this.server.sendRecipeList(this);
+        this.setAirTicks(400);
+        this.setCanClimb(true);
+        this.setNameTagVisible(true);
+        this.setNameTagAlwaysVisible(true);
+
+        this.getLevel().sendTime(this);
+        this.getLevel().sendWeather(this);
 
         if (this.hasPermission(Server.BROADCAST_CHANNEL_USERS)) {
             this.server.getPluginManager().subscribeToPermission(Server.BROADCAST_CHANNEL_USERS, this);
@@ -860,11 +885,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             this.dataPacket(respawnPacket);
         }
 
-        this.getLevel().sendTime(this);
-        this.getLevel().sendWeather(this);
-
-        this.setImmobile(false);
-        this.spawned = true;
+        this.sendPlayStatus(PlayStatusPacket.PLAYER_SPAWN);
 
         PlayerJoinEvent playerJoinEvent = new PlayerJoinEvent(this,
                 new TranslationContainer(TextFormat.YELLOW + "%multiplayer.player.joined", new String[]{this.displayName})
@@ -2069,57 +2090,24 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                 this.getAddress(),
                 String.valueOf(this.getPort())));
 
-        this.getServer().getScheduler().scheduleTask(null, () -> {
-            try {
-                if (this.protocol >= 313) {
-                    if (this.protocol >= 361) {
-                        this.dataPacket(new BiomeDefinitionListPacket());
-                    }
-                    this.dataPacket(new AvailableEntityIdentifiersPacket());
+        getServer().getScheduler().scheduleTask(null, () -> {
+            if (this.protocol >= 313) {
+                if (this.protocol >= 361) {
+                    this.dataPacket(new BiomeDefinitionListPacket());
                 }
-
-                this.setImmobile(true);
-                this.setCanClimb(true);
-                this.setNameTagVisible(true);
-                this.setNameTagAlwaysVisible(true);
-                this.sendAttributes();
-                this.adventureSettings.update();
-                this.sendPotionEffects(this);
-                this.sendData(this);
-                this.sendAllInventories();
-
-                if (this.protocol < 407) {
-                    if (this.gamemode == Player.SPECTATOR) {
-                        InventoryContentPacket inventoryContentPacket = new InventoryContentPacket();
-                        inventoryContentPacket.inventoryId = ContainerIds.CREATIVE;
-                        this.dataPacket(inventoryContentPacket);
-
-                    } else {
-                        this.inventory.sendCreativeContents();
-                    }
-                } else {
-                    this.inventory.sendCreativeContents();
-                }
-
-                this.inventory.sendHeldItem(this);
-                this.server.sendRecipeList(this);
-
-                boolean op = this.isOp();
-
-                if (!server.checkOpMovement && op) {
-                    this.setCheckMovement(false);
-                }
-
-                if (op || this.hasPermission("nukkit.textcolor") || this.server.suomiCraftPEMode()) {
-                    this.setRemoveFormat(false);
-                }
-            } catch (Exception e) {
-                this.close("", "Internal Server Error");
-                getServer().getLogger().logException(e);
+                this.dataPacket(new AvailableEntityIdentifiersPacket());
             }
         }, true);
 
-        this.setEnableClientCommand(true);
+        boolean op = this.isOp();
+
+        if (!server.checkOpMovement && op) {
+            this.setCheckMovement(false);
+        }
+
+        if (op || this.hasPermission("nukkit.textcolor") || this.server.suomiCraftPEMode()) {
+            this.setRemoveFormat(false);
+        }
 
         this.server.addOnlinePlayer(this);
         this.server.onPlayerCompleteLoginSequence(this);
@@ -3474,14 +3462,6 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                             this.dataPacket(re);
                         });
                     }
-                    break;
-                case ProtocolInfo.SET_LOCAL_PLAYER_AS_INITIALIZED_PACKET:
-                    if (this.initialized || this.protocol < 274) {
-                        return;
-                    }
-
-                    this.initialized = true;
-                    this.doFirstSpawn();
                     break;
                 case ProtocolInfo.RESPAWN_PACKET:
                     if (this.isAlive() || this.protocol < 388) {
