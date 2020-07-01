@@ -570,6 +570,9 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     }
 
     public void sendCommandData() {
+        if (!spawned) {
+            return;
+        }
         AvailableCommandsPacket pk = new AvailableCommandsPacket();
         Map<String, CommandDataVersions> data = new HashMap<>();
 
@@ -812,10 +815,10 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             }
         }
 
-        if (this.spawnChunkLoadCount != -1 && ++this.spawnChunkLoadCount >= server.spawnThreshold) {
+        if (this.spawnChunkLoadCount != -1 && ++this.spawnChunkLoadCount >= server.spawnThreshold && this.teleportPosition == null) {
             this.initialized = true;
-            this.doFirstSpawn();
             this.spawnChunkLoadCount = -1;
+            this.doFirstSpawn();
         }
 
         if (Timings.playerChunkSendTimer != null) Timings.playerChunkSendTimer.stopTiming();
@@ -830,31 +833,13 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
         this.noDamageTicks = 60;
         this.setEnableClientCommand(true);
-        this.sendAttributes();
         this.adventureSettings.update();
+        this.sendAttributes();
         this.sendPotionEffects(this);
         this.sendData(this);
         this.sendAllInventories();
-
-        if (this.protocol < 407) {
-            if (this.gamemode == Player.SPECTATOR) {
-                InventoryContentPacket inventoryContentPacket = new InventoryContentPacket();
-                inventoryContentPacket.inventoryId = ContainerIds.CREATIVE;
-                this.dataPacket(inventoryContentPacket);
-
-            } else {
-                this.inventory.sendCreativeContents();
-            }
-        } else {
-            this.inventory.sendCreativeContents();
-        }
-
         this.inventory.sendHeldItem(this);
-        this.server.sendRecipeList(this);
         this.setAirTicks(400);
-        this.setCanClimb(true);
-        this.setNameTagVisible(true);
-        this.setNameTagAlwaysVisible(true);
 
         this.getLevel().sendTime(this);
         this.getLevel().sendWeather(this);
@@ -893,6 +878,20 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             this.server.broadcastMessage(playerJoinEvent.getJoinMessage());
         }
 
+        this.server.sendRecipeList(this);
+        if (this.protocol < 407) {
+            if (this.gamemode == Player.SPECTATOR) {
+                InventoryContentPacket inventoryContentPacket = new InventoryContentPacket();
+                inventoryContentPacket.inventoryId = ContainerIds.CREATIVE;
+                this.dataPacket(inventoryContentPacket);
+
+            } else {
+                this.inventory.sendCreativeContents();
+            }
+        } else {
+            this.inventory.sendCreativeContents();
+        }
+
         for (long index : this.usedChunks.keySet()) {
             int chunkX = Level.getHashX(index);
             int chunkZ = Level.getHashZ(index);
@@ -904,7 +903,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         }
 
         // Prevent PlayerTeleportEvent during player spawn
-        //this.teleport(pos, null);
+        this.teleport(pos, null);
 
         if (!this.isSpectator()) {
             this.spawnToAll();
@@ -2080,6 +2079,12 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         this.dataPacket(startGamePacket);
 
         this.loggedIn = true;
+
+        this.level.sendTime(this);
+        this.sendAttributes();
+        this.setNameTagVisible(true);
+        this.setNameTagAlwaysVisible(true);
+        this.setCanClimb(true);
 
         this.server.getLogger().info(this.getServer().getLanguage().translateString("nukkit.player.logIn",
                 TextFormat.AQUA + this.username + TextFormat.WHITE,
