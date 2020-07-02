@@ -17,7 +17,7 @@ public class EmoteListPacket extends DataPacket {
 
     @Override
     public void decode() {
-        this.runtimeId = this.getEntityUniqueId();
+        /*this.runtimeId = this.getEntityUniqueId();
         int size = (int) this.getUnsignedVarInt();
         if (size > 1000) {
             throw new RuntimeException("Too big EmoteListPacket: " + size);
@@ -25,7 +25,7 @@ public class EmoteListPacket extends DataPacket {
         for (int i = 0; i < size; i++) {
             UUID id = this.getUUID();
             pieceIds.add(id);
-        }
+        }*/
     }
 
     @Override
