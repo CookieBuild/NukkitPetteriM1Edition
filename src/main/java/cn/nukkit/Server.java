@@ -82,6 +82,7 @@ import java.io.*;
 import java.net.*;
 import java.nio.ByteOrder;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -480,7 +481,7 @@ public class Server {
         }
 
         // Check for updates
-        this.scheduler.scheduleTask(null, () -> {
+        CompletableFuture.runAsync(() -> {
             try {
                 URLConnection request = new URL("https://api.github.com/repos/PetteriM1/NukkitPetteriM1Edition/commits/master").openConnection();
                 request.connect();
@@ -499,7 +500,7 @@ public class Server {
             } catch (Exception ignore) {
                 this.getLogger().debug("Update check failed");
             }
-        }, true);
+        });
 
         this.start();
     }
@@ -630,7 +631,7 @@ public class Server {
         }
 
         if (!forceSync && this.networkCompressionAsync) {
-            getScheduler().scheduleTask(null, () -> {
+            CompletableFuture.runAsync(() -> {
                 byte[][] payload = new byte[(packets.length << 1)][];
                 int size = 0;
                 for (int i = 0; i < packets.length; i++) {
@@ -670,7 +671,7 @@ public class Server {
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
-            }, true);
+            });
         } else {
             if (Timings.playerNetworkSendTimer != null) Timings.playerNetworkSendTimer.startTiming();
             byte[][] payload = new byte[(packets.length << 1)][];
@@ -2062,6 +2063,9 @@ public class Server {
         Entity.registerEntity("Zombie", EntityZombie.class);
         Entity.registerEntity("Pillager", EntityPillager.class);
         Entity.registerEntity("ZombieVillagerV2", EntityZombieVillagerV2.class);
+        Entity.registerEntity("Hoglin", EntityHoglin.class);
+        Entity.registerEntity("Piglin", EntityPiglin.class);
+        Entity.registerEntity("Zoglin", EntityZoglin.class);
         //Passive
         Entity.registerEntity("Bat", EntityBat.class);
         Entity.registerEntity("Cat", EntityCat.class);
@@ -2095,6 +2099,7 @@ public class Server {
         Entity.registerEntity("VillagerV2", EntityVillagerV2.class);
         Entity.registerEntity("Fox", EntityFox.class);
         Entity.registerEntity("Bee", EntityBee.class);
+        Entity.registerEntity("Strider", EntityStrider.class);
         //Vehicles
         Entity.registerEntity("MinecartRideable", EntityMinecartEmpty.class);
         Entity.registerEntity("MinecartChest", EntityMinecartChest.class);

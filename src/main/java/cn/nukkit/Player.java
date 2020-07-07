@@ -35,6 +35,7 @@ import cn.nukkit.form.window.FormWindow;
 import cn.nukkit.form.window.FormWindowCustom;
 import cn.nukkit.inventory.*;
 import cn.nukkit.inventory.transaction.CraftingTransaction;
+import cn.nukkit.inventory.transaction.EnchantTransaction;
 import cn.nukkit.inventory.transaction.InventoryTransaction;
 import cn.nukkit.inventory.transaction.action.InventoryAction;
 import cn.nukkit.inventory.transaction.data.ReleaseItemData;
@@ -92,6 +93,7 @@ import java.nio.ByteOrder;
 import java.util.List;
 import java.util.*;
 import java.util.Map.Entry;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -153,6 +155,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     protected PlayerUIInventory playerUIInventory;
     protected CraftingGrid craftingGrid;
     protected CraftingTransaction craftingTransaction;
+    protected EnchantTransaction enchantTransaction;
 
     protected long randomClientId;
 
@@ -1618,7 +1621,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
         // Frost Walker
         if (!revert && delta > 0.0001d) {
-            Enchantment frostWalker = inventory.getBoots().getEnchantment(Enchantment.ID_FROST_WALKER);
+            Enchantment frostWalker = inventory.getBootsFast().getEnchantment(Enchantment.ID_FROST_WALKER);
             if (frostWalker != null && frostWalker.getLevel() > 0 && !this.isSpectator() && this.y >= 1 && this.y <= 255) {
                 int radius = 2 + frostWalker.getLevel();
                 for (int coordX = this.getFloorX() - radius; coordX < this.getFloorX() + radius + 1; coordX++) {
@@ -1735,8 +1738,10 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             this.processMovement(tickDiff);
             this.motionX = this.motionY = this.motionZ = 0; // HACK: fix player knockback being messed up
 
-            if (!this.isSpectator()) {
-                this.checkNearEntities();
+            if (currentTick % 2 == 0) {
+                if (!this.isSpectator()) {
+                    this.checkNearEntities();
+                }
             }
 
             this.entityBaseTick(tickDiff);
@@ -1822,8 +1827,8 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     }
 
     private void updateBlockingFlag() {
-        boolean shieldInHand = this.getInventory().getItemInHand().getId() == ItemID.SHIELD;
-        boolean shieldInOffhand = this.getOffhandInventory().getItem(0).getId() == ItemID.SHIELD;
+        boolean shieldInHand = this.getInventory().getItemInHandFast().getId() == ItemID.SHIELD;
+        boolean shieldInOffhand = this.getOffhandInventory().getItemFast(0).getId() == ItemID.SHIELD;
         if (isBlocking()) {
             if (!isSneaking() || (!shieldInHand && !shieldInOffhand)) {
                 this.setBlocking(false);
@@ -2071,7 +2076,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                 this.getAddress(),
                 String.valueOf(this.getPort())));
 
-        this.getServer().getScheduler().scheduleTask(null, () -> {
+        CompletableFuture.runAsync(() -> {
             try {
                 if (!this.connected) return;
                 if (this.protocol >= 313) {
@@ -2119,7 +2124,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                 this.close("", "Internal Server Error");
                 getServer().getLogger().logException(e);
             }
-        }, true);
+        });
 
         this.setEnableClientCommand(true);
 
@@ -2859,6 +2864,10 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                             Server.broadcastPacket(this.getViewers().values(), entityEventPacket);
                             break;
                         case EntityEventPacket.ENCHANT:
+                            if (this.protocol >= ProtocolInfo.v1_16_0) {
+                                break;
+                            }
+
                             if (entityEventPacket.eid != this.id) {
                                 break;
                             }
@@ -3094,7 +3103,19 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                             }
                             this.craftingTransaction = null;
                         }
-
+                        return;
+                    } else if (this.protocol >= ProtocolInfo.v1_16_0 && transactionPacket.isEnchantingPart) {
+                        if (this.enchantTransaction == null) {
+                            this.enchantTransaction = new EnchantTransaction(this, actions);
+                        } else {
+                            for (InventoryAction action : actions) {
+                                this.enchantTransaction.addAction(action);
+                            }
+                        }
+                        if (this.enchantTransaction.canExecute()) {
+                            this.enchantTransaction.execute();
+                            this.enchantTransaction = null;
+                        }
                         return;
                     } else if (this.craftingTransaction != null) {
                         if (craftingTransaction.checkForCraftingPart(actions)) {
@@ -3104,7 +3125,23 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                             return;
                         } else {
                             this.server.getLogger().debug("Got unexpected normal inventory action with incomplete crafting transaction from " + this.username + ", refusing to execute crafting");
+                            if (this.protocol >= ProtocolInfo.v1_16_0) {
+                                this.removeAllWindows(false);
+                                this.sendAllInventories();
+                            }
                             this.craftingTransaction = null;
+                        }
+                    } else if (this.protocol >= ProtocolInfo.v1_16_0 && this.enchantTransaction != null) {
+                        if (enchantTransaction.checkForEnchantPart(actions)) {
+                            for (InventoryAction action : actions) {
+                                enchantTransaction.addAction(action);
+                            }
+                            return;
+                        } else {
+                            this.server.getLogger().debug("Got unexpected normal inventory action with incomplete enchanting transaction from " + this.username + ", refusing to execute enchant " + transactionPacket.toString());
+                            this.removeAllWindows(false);
+                            this.sendAllInventories();
+                            this.enchantTransaction = null;
                         }
                     }
 
@@ -5313,7 +5350,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         super.onBlock(entity, animate);
         if (animate) {
             this.setDataFlag(DATA_FLAGS, DATA_FLAG_SHIELD_SHAKING, true);
-            this.getServer().getScheduler().scheduleTask(null, ()-> {
+            CompletableFuture.runAsync(() -> {
                 if (this.isOnline()) {
                     this.setDataFlag(DATA_FLAGS, DATA_FLAG_SHIELD_SHAKING, false);
                 }
