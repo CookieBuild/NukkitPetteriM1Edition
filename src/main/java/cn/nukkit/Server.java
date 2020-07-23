@@ -255,6 +255,7 @@ public class Server {
     public boolean spawnAnimals;
     public boolean spawnMobs;
     public boolean savePlayerDataByUuid;
+    public boolean vanillaPortals;
 
     Server(final String filePath, String dataPath, String pluginPath, boolean loadPlugins, boolean debug) {
         Preconditions.checkState(instance == null, "Already initialized!");
@@ -422,7 +423,7 @@ public class Server {
         Generator.addGenerator(Normal.class, "normal", Generator.TYPE_INFINITE);
         Generator.addGenerator(Normal.class, "default", Generator.TYPE_INFINITE);
         Generator.addGenerator(Nether.class, "nether", Generator.TYPE_NETHER);
-        Generator.addGenerator(End.class, "end", Generator.TYPE_THE_END);
+        Generator.addGenerator(End.class, "the_end", Generator.TYPE_THE_END);
         Generator.addGenerator(cn.nukkit.level.generator.Void.class, "void", Generator.TYPE_VOID);
 
         if (this.defaultLevel == null) {
@@ -468,9 +469,9 @@ public class Server {
                     this.generateLevel("nether", System.currentTimeMillis(), Generator.getGenerator(Generator.TYPE_NETHER));
                     this.loadLevel("nether");
                 }
-                if (this.getLevelByName("end") == null && endEnabled) {
-                    this.generateLevel("end", System.currentTimeMillis(), Generator.getGenerator(Generator.TYPE_THE_END));
-                    this.loadLevel("end");
+                if (this.getLevelByName("the_end") == null && endEnabled) {
+                    this.generateLevel("the_end", System.currentTimeMillis(), Generator.getGenerator(Generator.TYPE_THE_END));
+                    this.loadLevel("the_end");
                 }
             } catch (Exception e) {
                 this.getLogger().debug("Unable to load levels", e);
@@ -1079,7 +1080,7 @@ public class Server {
     }
 
     public void sendRecipeList(Player player) {
-        if (player.protocol == ProtocolInfo.v1_16_0) {
+        if (player.protocol == ProtocolInfo.v1_16_0 || player.protocol == ProtocolInfo.v1_16_20) {
             player.dataPacket(CraftingManager.packet407);
         } else if (player.protocol > ProtocolInfo.v1_12_0) {
             player.dataPacket(CraftingManager.packet338);
@@ -1668,9 +1669,10 @@ public class Server {
         CompoundTag nbt = null;
         if (create) {
             Position spawn = this.getDefaultLevel().getSafeSpawn();
+            long time = System.currentTimeMillis();
             nbt = new CompoundTag()
-                    .putLong("firstPlayed", System.currentTimeMillis() / 1000)
-                    .putLong("lastPlayed", System.currentTimeMillis() / 1000)
+                    .putLong("firstPlayed", time / 1000)
+                    .putLong("lastPlayed", time / 1000)
                     .putList(new ListTag<DoubleTag>("Pos")
                             .add(new DoubleTag("0", spawn.x))
                             .add(new DoubleTag("1", spawn.y))
@@ -2399,6 +2401,7 @@ public class Server {
         this.chunksPerTick = this.getPropertyInt("chunk-sending-per-tick", 5);
         this.spawnThreshold = this.getPropertyInt("spawn-threshold", 50);
         this.savePlayerDataByUuid = this.getPropertyBoolean("save-player-data-by-uuid", true);
+        this.vanillaPortals = this.getPropertyBoolean("vanilla-portals", true);
         this.c_s_spawnThreshold = (int) Math.ceil(Math.sqrt(this.spawnThreshold));
         try {
             this.gamemode = this.getPropertyInt("gamemode", 0) & 0b11;
@@ -2516,6 +2519,7 @@ public class Server {
             put("do-not-limit-skin-geometry", true);
             put("automatic-bug-report", true);
             put("save-player-data-by-uuid", true);
+            put("vanilla-portals", true);
         }
     }
 

@@ -1397,47 +1397,87 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             block.onEntityCollide(this);
         }
 
+        if (endPortal) {
+            inEndPortalTicks++;
+        } else {
+            this.inEndPortalTicks = 0;
+        }
+        
+        if (server.endEnabled && inEndPortalTicks == 1) {
+            EntityPortalEnterEvent ev = new EntityPortalEnterEvent(this, EntityPortalEnterEvent.PortalType.END);
+            this.getServer().getPluginManager().callEvent(ev);
+
+            if (!ev.isCancelled()) {
+                if (this.getLevel().isEnd) {
+                    if (server.vanillaPortals && this.getSpawn().getLevel().getDimension() == Level.DIMENSION_OVERWORLD) {
+                        this.teleport(this.getSpawn(), TeleportCause.END_PORTAL);
+                    } else {
+                        this.teleport(this.getServer().getDefaultLevel().getSafeSpawn(), TeleportCause.END_PORTAL);
+                    }
+                } else {
+                    Level end = this.getServer().getLevelByName("the_end");
+                    if (end != null) {
+                        this.teleport(end.getSafeSpawn(), TeleportCause.END_PORTAL);
+                    }
+                }
+            }
+        }
+
         if (portal) {
             inPortalTicks++;
         } else {
             this.inPortalTicks = 0;
         }
 
-        if (endPortal) {
-            inEndPortalTicks++;
-        } else {
-            this.inEndPortalTicks = 0;
-        }
-
-        if (inEndPortalTicks == 1 && Server.getInstance().endEnabled) {
-            EntityPortalEnterEvent ev = new EntityPortalEnterEvent(this, EntityPortalEnterEvent.PortalType.END);
-            this.getServer().getPluginManager().callEvent(ev);
-
-            if (!ev.isCancelled()) {
-                if (!this.getLevel().isEnd) {
-                    if (this.getServer().getLevelByName("end") != null) {
-                        this.teleport(this.getServer().getLevelByName("end").getSafeSpawn(), TeleportCause.END_PORTAL);
-                    }
-                } else {
-                    this.getPlayer().teleport(this.getServer().getDefaultLevel().getSafeSpawn(), TeleportCause.END_PORTAL);
-                }
-            }
-        }
-
-        if (inPortalTicks == 80 && Server.getInstance().netherEnabled) {
+        if (server.netherEnabled && (inPortalTicks == 80 || (server.vanillaPortals && inPortalTicks == 1 && this.gamemode == CREATIVE))) {
             EntityPortalEnterEvent ev = new EntityPortalEnterEvent(this, EntityPortalEnterEvent.PortalType.NETHER);
             this.getServer().getPluginManager().callEvent(ev);
 
             if (!ev.isCancelled()) {
-                if (!this.getLevel().isNether) {
-                    if (this.getServer().getLevelByName("nether") != null) {
-                        this.teleport(this.getServer().getLevelByName("nether").getSafeSpawn(), TeleportCause.NETHER_PORTAL);
+                if (server.vanillaPortals) {
+                    Position newPos = moveToNether(this);
+                    if (newPos != null) {
+                        for (int x = -1; x < 2; x++) {
+                            for (int z = -1; z < 2; z++) {
+                                int chunkX = (newPos.getFloorX() >> 4) + x, chunkZ = (newPos.getFloorZ() >> 4) + z;
+                                FullChunk chunk = newPos.level.getChunk(chunkX, chunkZ, false);
+                                if (chunk == null || !(chunk.isGenerated() || chunk.isPopulated())) {
+                                    newPos.level.generateChunk(chunkX, chunkZ, true);
+                                }
+                            }
+                        }
+                        BlockNetherPortal.spawnPortal(newPos);
+                        this.teleport(newPos.add(1.5, 1, 0.5));
                     }
                 } else {
-                    this.getPlayer().teleport(this.getServer().getDefaultLevel().getSafeSpawn(), TeleportCause.NETHER_PORTAL);
+                    if (this.getLevel().isNether) {
+                        this.teleport(this.getServer().getDefaultLevel().getSafeSpawn(), TeleportCause.NETHER_PORTAL);
+                    } else {
+                        Level nether = this.getServer().getLevelByName("nether");
+                        if (nether != null) {
+                            this.teleport(nether.getSafeSpawn(), TeleportCause.NETHER_PORTAL);
+                        }
+                    }
                 }
             }
         }
+    }
+
+    private static Position moveToNether(Position current)   {
+        Level nether = Server.getInstance().getLevelByName("nether");
+        if (nether == null) {
+            return null;
+        } else {
+            if (current.level == nether) {
+                return new Position(mRound(current.getFloorX() << 3, 1024), mRound(current.getFloorY(), 32), mRound(current.getFloorZ() << 3, 1024), Server.getInstance().getDefaultLevel());
+            } else {
+                return new Position(mRound(current.getFloorX() >> 3, 128), mRound(current.getFloorY(), 32), mRound(current.getFloorZ() >> 3, 128), nether);
+            }
+        }
+    }
+
+    private static int mRound(int value, int factor) {
+        return Math.round((float) value / factor) * factor;
     }
 
     protected void checkNearEntities() {
@@ -1959,12 +1999,13 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         }
 
         CompoundTag nbt;
-        File legacyDataFile = new File(server.getDataPath() + "players/" + this.username.toLowerCase() + ".dat");
+        String lowerName = this.username.toLowerCase();
+        File legacyDataFile = new File(server.getDataPath() + "players/" + lowerName + ".dat");
         File dataFile = new File(server.getDataPath() + "players/" + this.uuid.toString() + ".dat");
         if (this.server.savePlayerDataByUuid) {
             boolean dataFound = dataFile.exists();
             if (!dataFound && legacyDataFile.exists()) {
-                nbt = this.server.getOfflinePlayerData(this.username, false);
+                nbt = this.server.getOfflinePlayerData(lowerName, false);
                 if (!legacyDataFile.delete()) {
                     this.server.getLogger().warning("Could not delete legacy player data for " + this.username);
                 }
@@ -1976,7 +2017,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             if (legacyMissing && dataFile.exists()) {
                 nbt = this.server.getOfflinePlayerData(this.uuid, false);
             } else {
-                nbt = this.server.getOfflinePlayerData(this.username, legacyMissing);
+                nbt = this.server.getOfflinePlayerData(lowerName, legacyMissing);
             }
         }
 

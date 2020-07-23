@@ -23,17 +23,17 @@ public abstract class EntityWalking extends BaseEntity {
             return;
         }
 
-        if (this.followTarget != null && !this.followTarget.closed && this.followTarget.isAlive()) {
+        if (this.followTarget != null && !this.followTarget.closed && this.followTarget.isAlive() && this.followTarget.canBeFollowed()) {
             return;
         }
 
         Vector3 target = this.target;
-        if (!(target instanceof EntityCreature) || !this.targetOption((EntityCreature) target, this.distanceSquared(target))) {
+        if (!(target instanceof EntityCreature) || !this.targetOption((EntityCreature) target, this.distanceSquared(target)) || !((Entity) target).canBeFollowed()) {
             double near = Integer.MAX_VALUE;
 
             Entity[] e = this.getLevel().getEntities();
             for (Entity entity : e) {
-                if (entity == this || !(entity instanceof EntityCreature) || entity instanceof EntityAnimal) {
+                if (entity == this || !(entity instanceof EntityCreature) || (entity instanceof EntityAnimal || !entity.canBeFollowed())) {
                     continue;
                 }
 
@@ -87,7 +87,9 @@ public abstract class EntityWalking extends BaseEntity {
         } else {
             int b = level.getBlockIdAt(NukkitMath.floorDouble(this.x), (int) (this.y + 0.8), NukkitMath.floorDouble(this.z));
             if (b == BlockID.WATER || b == BlockID.STILL_WATER) {
-                this.motionY = this.getGravity() * 2;
+                if (!this.isDrowned || this.target == null) {
+                    this.motionY = this.getGravity() * 2;
+                }
                 return true;
             }
         }
@@ -135,7 +137,7 @@ public abstract class EntityWalking extends BaseEntity {
                 return null;
             }
 
-            if (this.followTarget != null && !this.followTarget.closed && this.followTarget.isAlive()) {
+            if (this.followTarget != null && !this.followTarget.closed && this.followTarget.isAlive() && this.followTarget.canBeFollowed()) {
                 double x = this.followTarget.x - this.x;
                 double z = this.followTarget.z - this.z;
 
@@ -147,7 +149,7 @@ public abstract class EntityWalking extends BaseEntity {
                     if (this.isInsideOfWater()) {
                         this.motionX = this.getSpeed() * moveMultifier * 0.05 * (x / diff);
                         this.motionZ = this.getSpeed() * moveMultifier * 0.05 * (z / diff);
-                        this.level.addParticle(new BubbleParticle(this.add(Utils.rand(-2.0,2.0),Utils.rand(-0.5,0),Utils.rand(-2.0,2.0))));
+                        if (!this.isDrowned) this.level.addParticle(new BubbleParticle(this.add(Utils.rand(-2.0,2.0),Utils.rand(-0.5,0),Utils.rand(-2.0,2.0))));
                     } else {
                         this.motionX = this.getSpeed() * moveMultifier * 0.1 * (x / diff);
                         this.motionZ = this.getSpeed() * moveMultifier * 0.1 * (z / diff);
@@ -171,7 +173,7 @@ public abstract class EntityWalking extends BaseEntity {
                     if (this.isInsideOfWater()) {
                         this.motionX = this.getSpeed() * moveMultifier * 0.05 * (x / diff);
                         this.motionZ = this.getSpeed() * moveMultifier * 0.05 * (z / diff);
-                        this.level.addParticle(new BubbleParticle(this.add(Utils.rand(-2.0,2.0),Utils.rand(-0.5,0),Utils.rand(-2.0,2.0))));
+                        if (!this.isDrowned) this.level.addParticle(new BubbleParticle(this.add(Utils.rand(-2.0,2.0),Utils.rand(-0.5,0),Utils.rand(-2.0,2.0))));
                     } else {
                         this.motionX = this.getSpeed() * moveMultifier * 0.15 * (x / diff);
                         this.motionZ = this.getSpeed() * moveMultifier * 0.15 * (z / diff);
