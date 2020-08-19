@@ -2351,6 +2351,10 @@ public class Server {
         BlockEntity.registerBlockEntity(BlockEntity.MUSIC, BlockEntityMusic.class);
     }
 
+    public boolean isNetherAllowed() {
+        return this.netherEnabled;
+    }
+
     public static Server getInstance() {
         return instance;
     }
